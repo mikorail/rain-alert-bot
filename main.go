@@ -1343,6 +1343,21 @@ func main() {
 		}
 	}()
 
+	// --- Self-ping keepalive (prevents Fly.io from marking machine as idle) ---
+	go func() {
+		client := &http.Client{Timeout: 5 * time.Second}
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", cfg.Port))
+			if err != nil {
+				log.Printf("Keepalive ping failed: %v", err)
+				continue
+			}
+			resp.Body.Close()
+		}
+	}()
+
 	// --- Telegram long polling ---
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
