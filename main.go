@@ -1375,6 +1375,19 @@ func main() {
 		}
 	}()
 
+	// --- Clear any stale Telegram sessions before polling ---
+	// This forces Telegram to drop any previous getUpdates connections
+	if _, err := bot.api.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
+		log.Printf("Warning: failed to clear webhook: %v", err)
+	}
+	// Short getUpdates with timeout=0 to claim the session
+	clearReq := tgbotapi.NewUpdate(0)
+	clearReq.Timeout = 0
+	if _, err := bot.api.GetUpdates(clearReq); err != nil {
+		log.Printf("Initial session claim: %v (will retry)", err)
+		time.Sleep(2 * time.Second)
+	}
+
 	// --- Telegram long polling (manual loop with conflict handling) ---
 	log.Println("Bot is running. Waiting for messages...")
 
