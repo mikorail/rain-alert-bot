@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -1325,6 +1328,11 @@ func main() {
 	c.Start()
 	log.Println("Cron started: scheduled alerts every 3h + sudden rain check every 15min")
 
+	// --- Graceful shutdown setup ---
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	shutdownCh := make(chan struct{})
+
 	// --- Health check HTTP server (required for Render/Fly.io) ---
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1336,9 +1344,13 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
+	server := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: mux,
+	}
 	go func() {
 		log.Printf("Health server listening on :%s", cfg.Port)
-		if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Health server error: %v", err)
 		}
 	}()
@@ -1348,13 +1360,18 @@ func main() {
 		client := &http.Client{Timeout: 5 * time.Second}
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", cfg.Port))
-			if err != nil {
-				log.Printf("Keepalive ping failed: %v", err)
-				continue
+		for {
+			select {
+			case <-ticker.C:
+				resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", cfg.Port))
+				if err != nil {
+					log.Printf("Keepalive ping failed: %v", err)
+					continue
+				}
+				resp.Body.Close()
+			case <-shutdownCh:
+				return
 			}
-			resp.Body.Close()
 		}
 	}()
 
@@ -1364,6 +1381,30 @@ func main() {
 	updates := bot.api.GetUpdatesChan(u)
 
 	log.Println("Bot is running. Waiting for messages...")
+
+	// Wait for shutdown signal in background
+	go func() {
+		sig := <-sigCh
+		log.Printf("Received signal %v, shutting down gracefully...", sig)
+
+		// Signal all goroutines to stop
+		close(shutdownCh)
+
+		// Stop Telegram polling immediately — closes the updates channel
+		bot.api.StopReceivingUpdates()
+
+		// Stop cron scheduler
+		c.Stop()
+
+		// Shutdown HTTP server with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("HTTP server shutdown error: %v", err)
+		}
+
+		log.Println("Shutdown complete")
+	}()
 
 	for update := range updates {
 		go bot.HandleUpdate(update)
