@@ -14,9 +14,9 @@ services:
       - key: PORT
         value: "8080"
       - key: DEFAULT_LAT
-        value: "-6.2088"
+        value: "-6.1672"
       - key: DEFAULT_LON
-        value: "106.8456"
+        value: "106.8341"
     healthCheckPath: /health
     disk:
       name: bot-data
