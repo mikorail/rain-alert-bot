@@ -1,0 +1,24 @@
+# render.yaml — Infrastructure as Code for Render.com
+#
+# Deploy: Connect your GitHub repo → Render auto-detects this file
+# Free tier: Background Worker (no sleep!)
+
+services:
+  - type: web
+    name: rain-alert-bot
+    runtime: docker
+    plan: free
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false   # You'll set this manually in the dashboard
+      - key: PORT
+        value: "8080"
+      - key: DEFAULT_LAT
+        value: "-6.2088"
+      - key: DEFAULT_LON
+        value: "106.8456"
+    healthCheckPath: /health
+    disk:
+      name: bot-data
+      mountPath: /app/data
+      sizeGB: 1

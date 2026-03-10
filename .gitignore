@@ -1,0 +1,6 @@
+subscribers.json
+subscribers.json.tmp
+.env
+rain-alert-bot
+*.exe
+.DS_Store

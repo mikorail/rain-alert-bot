@@ -1,0 +1,29 @@
+# fly.toml — Configuration for Fly.io deployment
+# Deploy: fly launch → fly deploy
+
+app = "rain-alert-bot"
+primary_region = "sin"  # Singapore (closest to Jakarta)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DEFAULT_LAT = "-6.2088"
+  DEFAULT_LON = "106.8456"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false   # IMPORTANT: keep bot running 24/7
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+# Persistent volume for subscriber data
+[[mounts]]
+  source = "bot_data"
+  destination = "/app/data"
