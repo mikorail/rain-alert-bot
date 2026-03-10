@@ -1375,38 +1375,60 @@ func main() {
 		}
 	}()
 
-	// --- Telegram long polling ---
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := bot.api.GetUpdatesChan(u)
-
+	// --- Telegram long polling (manual loop with conflict handling) ---
 	log.Println("Bot is running. Waiting for messages...")
 
-	// Wait for shutdown signal in background
 	go func() {
 		sig := <-sigCh
 		log.Printf("Received signal %v, shutting down gracefully...", sig)
-
-		// Signal all goroutines to stop
 		close(shutdownCh)
-
-		// Stop Telegram polling immediately — closes the updates channel
-		bot.api.StopReceivingUpdates()
-
-		// Stop cron scheduler
 		c.Stop()
-
-		// Shutdown HTTP server with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Printf("HTTP server shutdown error: %v", err)
 		}
-
 		log.Println("Shutdown complete")
+		os.Exit(0)
 	}()
 
-	for update := range updates {
-		go bot.HandleUpdate(update)
+	offset := 0
+	for {
+		select {
+		case <-shutdownCh:
+			return
+		default:
+		}
+
+		u := tgbotapi.NewUpdate(offset)
+		u.Timeout = 30
+
+		updates, err := bot.api.GetUpdates(u)
+		if err != nil {
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "Conflict") || strings.Contains(errMsg, "terminated by other") {
+				log.Println("Polling conflict detected, waiting 65s for stale session to expire...")
+				select {
+				case <-time.After(65 * time.Second):
+				case <-shutdownCh:
+					return
+				}
+				continue
+			}
+			log.Printf("Error getting updates: %v, retrying in 5s...", err)
+			select {
+			case <-time.After(5 * time.Second):
+			case <-shutdownCh:
+				return
+			}
+			continue
+		}
+
+		for _, update := range updates {
+			if update.UpdateID >= offset {
+				offset = update.UpdateID + 1
+			}
+			go bot.HandleUpdate(update)
+		}
 	}
 }
