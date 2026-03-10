@@ -8,6 +8,9 @@ primary_region = 'sin'
 
 [build]
 
+[deploy]
+  strategy = "immediate"  # Stop old instance before starting new (no overlap)
+
 [env]
   PORT = "8080"
   DEFAULT_LAT = "-6.1672"

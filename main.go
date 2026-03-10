@@ -1375,19 +1375,6 @@ func main() {
 		}
 	}()
 
-	// --- Clear any stale Telegram sessions before polling ---
-	// This forces Telegram to drop any previous getUpdates connections
-	if _, err := bot.api.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
-		log.Printf("Warning: failed to clear webhook: %v", err)
-	}
-	// Short getUpdates with timeout=0 to claim the session
-	clearReq := tgbotapi.NewUpdate(0)
-	clearReq.Timeout = 0
-	if _, err := bot.api.GetUpdates(clearReq); err != nil {
-		log.Printf("Initial session claim: %v (will retry)", err)
-		time.Sleep(2 * time.Second)
-	}
-
 	// --- Telegram long polling (manual loop with conflict handling) ---
 	log.Println("Bot is running. Waiting for messages...")
 
@@ -1406,6 +1393,7 @@ func main() {
 	}()
 
 	offset := 0
+	conflictRetries := 0
 	for {
 		select {
 		case <-shutdownCh:
@@ -1414,15 +1402,21 @@ func main() {
 		}
 
 		u := tgbotapi.NewUpdate(offset)
-		u.Timeout = 30
+		u.Timeout = 10
 
 		updates, err := bot.api.GetUpdates(u)
 		if err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "Conflict") || strings.Contains(errMsg, "terminated by other") {
-				log.Println("Polling conflict detected, waiting 65s for stale session to expire...")
+				conflictRetries++
+				// Exponential backoff: 10s, 20s, 40s, 60s max
+				wait := time.Duration(10<<(conflictRetries-1)) * time.Second
+				if wait > 60*time.Second {
+					wait = 60 * time.Second
+				}
+				log.Printf("Polling conflict (attempt %d), waiting %v...", conflictRetries, wait)
 				select {
-				case <-time.After(65 * time.Second):
+				case <-time.After(wait):
 				case <-shutdownCh:
 					return
 				}
@@ -1436,6 +1430,7 @@ func main() {
 			}
 			continue
 		}
+		conflictRetries = 0 // Reset on success
 
 		for _, update := range updates {
 			if update.UpdateID >= offset {
