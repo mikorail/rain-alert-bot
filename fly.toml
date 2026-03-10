@@ -9,8 +9,9 @@ primary_region = "sin"  # Singapore (closest to Jakarta)
 
 [env]
   PORT = "8080"
-  DEFAULT_LAT = "-6.2088"
-  DEFAULT_LON = "106.8456"
+  DEFAULT_LAT = "-6.1672"
+  DEFAULT_LON = "106.8341"
+  DATA_DIR = "/app/data"
 
 [http_service]
   internal_port = 8080

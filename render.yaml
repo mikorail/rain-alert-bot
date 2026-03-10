@@ -17,6 +17,8 @@ services:
         value: "-6.1672"
       - key: DEFAULT_LON
         value: "106.8341"
+      - key: DATA_DIR
+        value: "/app/data"
     healthCheckPath: /health
     disk:
       name: bot-data

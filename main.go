@@ -34,6 +34,7 @@ type Config struct {
 	Port          string
 	DefaultLat    float64
 	DefaultLon    float64
+	DataDir       string
 }
 
 func LoadConfig() Config {
@@ -54,11 +55,17 @@ func LoadConfig() Config {
 		log.Fatal("TELEGRAM_BOT_TOKEN has invalid format")
 	}
 
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+
 	return Config{
 		TelegramToken: token,
 		Port:          port,
 		DefaultLat:    lat,
 		DefaultLon:    lon,
+		DataDir:       dataDir,
 	}
 }
 
@@ -1046,7 +1053,7 @@ func NewBot(cfg Config) (*Bot, error) {
 
 	return &Bot{
 		api:           api,
-		store:         NewSubscriberStore("subscribers.json"),
+		store:         NewSubscriberStore(cfg.DataDir + "/subscribers.json"),
 		config:        cfg,
 		suddenTracker: NewSuddenRainTracker(),
 	}, nil

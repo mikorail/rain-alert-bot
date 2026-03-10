@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+subscribers.json
+subscribers.json.tmp
+.git
+.gitignore
+.DS_Store
+*.exe
+rain-alert-bot
+README.md
+render.yaml
+fly.toml
